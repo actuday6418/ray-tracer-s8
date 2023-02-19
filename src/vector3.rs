@@ -8,18 +8,54 @@ struct Vec3 {
 }
 
 ///TODO: implement methods
-// impl Vec3 {
-//     pub fn length() -> f32 {}
-//     pub fn length_squared() -> f32 {}
-//     pub fn inverse() -> Self {}
-//     pub fn unit_vector() -> Self {}
-// }
+impl Vec3 {
+pub fn length(&self)-> f32{
 
-///TODO: represents cross product 
-// impl ops::Mul for Vec3 {}
+(self.x.pow(2)+self.y.pow(2)+self.z.pow(2)).sqrt()
+}
 
-///TODO: represents dot product
-// impl ops::Rem for Vec3 {}
+pub fn length_squared(&self)-> f32 {
+    self.x.pow(2)+self.y.pow(2)+self.z.pow(2)
+}
+
+pub fn inverse(&self) -> Self {
+    Self{
+        x:-self.x,
+        y:-self.y,
+        z:-self.z,
+    }
+}
+
+pub fun unit_vector() -> Self {
+    Self{
+        x:  -self.x/ self.length,
+        y:  -self.y/ self.length,
+        z:  -self.z/ self.length,
+    }
+}
+}
+
+
+
+
+impl ops:Mul for Vec3 {
+    type Output = Self;
+    //A × B = (bz – cy)i – (az – cx)j + (ay – bx)k = (bz – cy)i + (cx – az)j + (ay – bx)k
+    fn mul(self, other: Self) -> Self {
+        Self {
+            x: self.y * other.z - self.z * other.y,
+            y: self.z * other.x - self.x * other.z,
+            z: self.x * other.y - self.y * other.x,
+        }
+    }  
+}
+
+imp ops:Rem for Vec3 {
+ type Output=f32;
+ fn rem(self,other: Self) -> f32{
+    self.x*other.x + self.y*other.y +self.z*other.z
+ }
+}
 
 impl ops::Add for Vec3 {
     type Output = Self;
