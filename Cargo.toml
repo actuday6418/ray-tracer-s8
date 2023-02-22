@@ -7,4 +7,5 @@ edition = "2021"
 
 [dependencies]
 image = "*"
+eframe = "0.21.3"
 roots = "0.0.8"
