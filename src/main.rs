@@ -5,6 +5,7 @@ mod shapes;
 pub mod vector3;
 use color::Color;
 use ray::Ray;
+use shapes::Seeable;
 use std::sync::mpsc;
 use std::thread::spawn;
 use vector3::Vec3;
@@ -12,7 +13,7 @@ mod gui;
 
 fn ray_color(ray: &Ray) -> Color {
     let unit = ray.direction.unit_vector();
-    let t = unit.y;
+    let t = -unit.y;
     (1f32 - t) * color::WHITE
         + t * Color {
             r: 0.5,
@@ -57,12 +58,30 @@ fn render(rx: mpsc::Receiver<gui::Message>) {
         };
 
     let mut img = RgbImage::new(width as u32, height as u32);
+    let w = vec![
+        shapes::Sphere {
+            radius: 0.5f32,
+            center: Vec3 {
+                x: 0f32,
+                y: 0f32,
+                z: -1f32,
+            },
+        },
+        shapes::Sphere {
+            radius: 100f32,
+            center: Vec3 {
+                x: 0f32,
+                y: -101f32,
+                z: -1f32,
+            },
+        },
+    ];
     let s = shapes::Sphere {
-        radius: 10f32,
+        radius: 0.5f32,
         center: Vec3 {
             x: 0f32,
             y: 0f32,
-            z: 25f32,
+            z: -1f32,
         },
     };
     loop {
@@ -76,20 +95,14 @@ fn render(rx: mpsc::Receiver<gui::Message>) {
                         direction: (lower_left_corner + u * horizontal + v * vertical)
                             .unit_vector(),
                     };
-                    *p = match s.collides(&r) {
-                        roots::Roots::One([x]) | roots::Roots::Two([x, _]) => {
-                            let point = r.origin + x * r.direction;
-                            let normal = point - s.center;
-                            let normal = normal.unit_vector();
-                            Color {
-                                r: normal.x,
-                                g: normal.y,
-                                b: normal.z,
-                            }
-                            .to_image_rgb()
+                    *p = match w.seen(&r) {
+                        Some((_, normal)) => Color {
+                            r: normal.x,
+                            g: normal.y,
+                            b: normal.z,
                         }
-                        roots::Roots::No(_) => ray_color(&r).to_image_rgb(),
-                        _ => color::GREEN.to_image_rgb(),
+                        .to_image_rgb(),
+                        None => ray_color(&r).to_image_rgb(),
                     };
                 }
                 img.save("/home/actuday/Pictures/img.png").unwrap()
