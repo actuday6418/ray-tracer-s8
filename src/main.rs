@@ -35,7 +35,7 @@ fn main() {
 
 fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGUI>) {
     let aspect_ratio = 16f32 / 9f32;
-    let image_height = 1080f32;
+    let image_height = 360f32;
     let image_width = aspect_ratio * image_height;
 
     let mut camera = camera::Camera::new(aspect_ratio);

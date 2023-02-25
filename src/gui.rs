@@ -1,4 +1,4 @@
-use eframe::{egui, emath::Align};
+use eframe::egui;
 use egui_extras::image::RetainedImage;
 use std::sync::mpsc;
 
@@ -45,7 +45,7 @@ impl MyApp {
             origin_y: 0f32,
             origin_z: 0f32,
             focal_length: 1f32,
-            image_scale: 0.325,
+            image_scale: 0.97,
         }
     }
 }
