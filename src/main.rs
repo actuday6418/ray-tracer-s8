@@ -12,8 +12,7 @@ use vector3::Vec3;
 mod gui;
 
 fn ray_color(ray: &Ray) -> Color {
-    let unit = ray.direction.unit_vector();
-    let t = -unit.y;
+    let t = ray.direction.unit_vector().y;
     (1f32 - t) * color::WHITE
         + t * Color {
             r: 0.5,
@@ -22,13 +21,18 @@ fn ray_color(ray: &Ray) -> Color {
         }
 }
 
-fn main() {
-    let (tx, rx) = mpsc::channel::<gui::Message>();
-    spawn(move || render(rx));
-    gui::launch(tx);
+pub enum MessageToGUI {
+    ImageRendered(eframe::egui::ColorImage),
 }
 
-fn render(rx: mpsc::Receiver<gui::Message>) {
+fn main() {
+    let (txa, rxa) = mpsc::channel::<gui::MessageToRender>();
+    let (txb, rxb) = mpsc::channel::<MessageToGUI>();
+    spawn(move || render(rxa, txb));
+    gui::launch(txa, rxb);
+}
+
+fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGUI>) {
     let aspect_ratio = 16f32 / 9f32;
     let height = 1080f32;
     let width = aspect_ratio * height;
@@ -76,23 +80,16 @@ fn render(rx: mpsc::Receiver<gui::Message>) {
             },
         },
     ];
-    let s = shapes::Sphere {
-        radius: 0.5f32,
-        center: Vec3 {
-            x: 0f32,
-            y: 0f32,
-            z: -1f32,
-        },
-    };
     loop {
         match rx.recv() {
-            Ok(gui::Message::Render) => {
+            Ok(gui::MessageToRender::Render) => {
                 for (x, y, p) in img.enumerate_pixels_mut() {
+                    let y = height as u32 - y - 1;
                     let u = (x as f32) / (width - 1f32);
                     let v = (y as f32) / (height - 1f32);
                     let r = Ray {
                         origin,
-                        direction: (lower_left_corner + u * horizontal + v * vertical)
+                        direction: (lower_left_corner + u * horizontal + v * vertical - origin)
                             .unit_vector(),
                     };
                     *p = match w.seen(&r) {
@@ -105,9 +102,12 @@ fn render(rx: mpsc::Receiver<gui::Message>) {
                         None => ray_color(&r).to_image_rgb(),
                     };
                 }
-                img.save("/home/actuday/Pictures/img.png").unwrap()
+                let size = [img.width() as usize, img.height() as usize];
+                let imgbuff = img.clone().into_raw();
+                let egui_img = eframe::egui::ColorImage::from_rgb(size, &imgbuff);
+                tx.send(MessageToGUI::ImageRendered(egui_img)).unwrap();
             }
-            Ok(gui::Message::UpdateCameraOrigin(origin_new)) => {
+            Ok(gui::MessageToRender::UpdateCameraOrigin(origin_new)) => {
                 origin = origin_new;
                 lower_left_corner = origin
                     - horizontal / 2f32
@@ -118,7 +118,7 @@ fn render(rx: mpsc::Receiver<gui::Message>) {
                         z: focal_length,
                     };
             }
-            Ok(gui::Message::UpdateCameraFocalLength(focal_length_new)) => {
+            Ok(gui::MessageToRender::UpdateCameraFocalLength(focal_length_new)) => {
                 focal_length = focal_length_new;
                 lower_left_corner = origin
                     - horizontal / 2f32

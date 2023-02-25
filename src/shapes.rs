@@ -3,7 +3,7 @@ use crate::vector3::Vec3;
 use roots::Roots;
 use std::cmp::Ordering;
 
-const T_MIN: f32 = 0.05;
+const T_MIN: f32 = 0.0;
 const T_MAX: f32 = 1000.0;
 
 trait Intersectable {
@@ -61,7 +61,7 @@ where
             _ => unreachable!(),
         }
         .map(|x| {
-            let point = ray.origin + x * ray.direction;
+            let point = ray.at(x);
             (point, self.normal_at(point))
         })
     }

@@ -19,7 +19,7 @@ impl default::Default for Vec3 {
 
 impl Vec3 {
     pub fn length(&self) -> f32 {
-        (self.x.powi(2) + self.y.powi(2) + self.z.powi(2)).sqrt()
+        self.length_squared().sqrt()
     }
 
     pub fn length_squared(&self) -> f32 {
@@ -27,19 +27,11 @@ impl Vec3 {
     }
 
     pub fn inverse(&self) -> Self {
-        Self {
-            x: -self.x,
-            y: -self.y,
-            z: -self.z,
-        }
+        -1f32 * *self
     }
 
     pub fn unit_vector(&self) -> Self {
-        Self {
-            x: -self.x / self.length(),
-            y: -self.y / self.length(),
-            z: -self.z / self.length(),
-        }
+        *self / self.length()
     }
 }
 
