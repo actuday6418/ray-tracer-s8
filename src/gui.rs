@@ -8,6 +8,8 @@ pub enum MessageToRender {
     Render,
     UpdateCameraOrigin(Vec3),
     UpdateCameraFocalLength(f32),
+    UpdateSampleCount(u32),
+    SaveImage,
 }
 
 pub fn launch(tx: mpsc::Sender<MessageToRender>, rx: mpsc::Receiver<MessageToGUI>) {
@@ -32,6 +34,7 @@ struct MyApp {
     origin_z: f32,
     focal_length: f32,
     image_scale: f32,
+    sample_count: u32,
 }
 
 impl MyApp {
@@ -46,13 +49,14 @@ impl MyApp {
             origin_z: 0f32,
             focal_length: 1f32,
             image_scale: 0.97,
+            sample_count: 5,
         }
     }
 }
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
-        if let Ok(MessageToGUI::ImageRendered(image)) = self.rx.try_recv() {
+        if let Ok(MessageToGUI::Rendered(image)) = self.rx.try_recv() {
             self.image = Some(RetainedImage::from_color_image("rendered image", image));
         }
         egui::TopBottomPanel::top("Controls")
@@ -103,11 +107,26 @@ impl eframe::App for MyApp {
                     }
                 });
                 ui.horizontal(|ui| {
+                    ui.label("Sample count");
+                    let f = ui.add(
+                        egui::Slider::new(&mut self.sample_count, 1..=100).drag_value_speed(0.02),
+                    );
+                    if f.drag_released() || f.changed() && !f.dragged() {
+                        self.tx
+                            .send(MessageToRender::UpdateSampleCount(self.sample_count))
+                            .unwrap();
+                        self.tx.send(MessageToRender::Render).unwrap()
+                    }
+                });
+                ui.horizontal(|ui| {
                     ui.label("Image viewer scale");
                     ui.add(
                         egui::Slider::new(&mut self.image_scale, 0.05f32..=3f32)
                             .drag_value_speed(0.5),
                     );
+                    if ui.button("save").clicked() {
+                        self.tx.send(MessageToRender::SaveImage).unwrap()
+                    }
                 });
             });
         egui::CentralPanel::default().show(ctx, |ui| {

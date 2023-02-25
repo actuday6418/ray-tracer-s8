@@ -61,6 +61,17 @@ impl ops::Mul<Color> for f32 {
     }
 }
 
+impl ops::Div<f32> for Color {
+    type Output = Color;
+    fn div(self, rhs: f32) -> Self::Output {
+        Self {
+            r: self.r / rhs,
+            g: self.g / rhs,
+            b: self.b / rhs,
+        }
+    }
+}
+
 pub const WHITE: Color = Color {
     r: 1.0,
     g: 1.0,
@@ -77,4 +88,10 @@ pub const GREEN: Color = Color {
     r: 0.2,
     b: 0.2,
     g: 1.0,
+};
+
+pub const BLACK: Color = Color {
+    r: 0.0,
+    b: 0.0,
+    g: 0.0,
 };
