@@ -33,6 +33,14 @@ impl Vec3 {
     pub fn unit_vector(&self) -> Self {
         *self / self.length()
     }
+
+    pub fn from_slice(slice: [f32; 3]) -> Self {
+        Self {
+            x: slice[0],
+            y: slice[1],
+            z: slice[2],
+        }
+    }
 }
 
 /// implements CROSS PRODUCT

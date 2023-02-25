@@ -1,7 +1,7 @@
 use image::Rgb;
 use std::ops;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Color {
     pub r: f32,
     pub g: f32,
@@ -27,6 +27,12 @@ impl ops::Add for Color {
             g: self.g + other.g,
             b: self.b + other.b,
         }
+    }
+}
+
+impl ops::AddAssign for Color {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = self.clone() + rhs;
     }
 }
 

@@ -1,5 +1,6 @@
 use image::RgbImage;
 use rand::Rng;
+use rand_distr::{Distribution, UnitSphere};
 mod camera;
 mod color;
 mod ray;
@@ -14,14 +15,22 @@ use vector3::Vec3;
 mod gui;
 use log::{info, warn};
 
-fn ray_color(ray: &Ray) -> Color {
-    let t = ray.direction.unit_vector().y;
-    (1f32 - t) * color::WHITE
-        + t * Color {
-            r: 0.5,
-            g: 0.7,
-            b: 1.0,
+fn ray_color<T: Seeable>(ray: &Ray, world: &T) -> Color {
+    match world.seen(&ray) {
+        Some((point, normal)) => {
+            let rp = (Vec3::from_slice(UnitSphere.sample(&mut rand::thread_rng())) + Vec3 {y: 0.5,..Default::default()}).unit_vector();
+            if rp.z <
         }
+        None => {
+            let t = ray.direction.unit_vector().y;
+            (1f32 - t) * color::WHITE
+                + t * Color {
+                    r: 0.5,
+                    g: 0.7,
+                    b: 1.0,
+                }
+        }
+    }
 }
 
 pub enum MessageToGUI {
@@ -39,13 +48,14 @@ fn main() {
 fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGUI>) {
     let aspect_ratio = 16f32 / 9f32;
     let image_height = 360f32;
+    let max_bounces = 5;
     let image_width = aspect_ratio * image_height;
 
     let mut camera = camera::Camera::new(aspect_ratio);
     let mut sample_count: u32 = 5;
 
     let mut img = RgbImage::new(image_width as u32, image_height as u32);
-    let w = vec![
+    let world = vec![
         shapes::Sphere {
             radius: 0.5f32,
             center: Vec3 {
@@ -75,15 +85,8 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
                         let u = (x as f32 + rng.gen_range(0f32..1f32)) / (image_width - 1f32);
                         let v = (y as f32 + rng.gen_range(0f32..1f32)) / (image_height - 1f32);
                         let r = camera.get_ray(u, v);
-                        pix_color = pix_color
-                            + match w.seen(&r) {
-                                Some((_, normal)) => Color {
-                                    r: normal.x,
-                                    g: normal.y,
-                                    b: normal.z,
-                                },
-                                None => ray_color(&r),
-                            };
+                        let mut depth = max_bounces;
+                        pix_color += ray_color(&r, &world);
                     }
                     pix_color = pix_color / sample_count as f32;
                     *p = pix_color.to_image_rgb();
