@@ -1,4 +1,5 @@
 use image::RgbImage;
+mod camera;
 mod color;
 mod ray;
 mod shapes;
@@ -34,34 +35,12 @@ fn main() {
 
 fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGUI>) {
     let aspect_ratio = 16f32 / 9f32;
-    let height = 1080f32;
-    let width = aspect_ratio * height;
+    let image_height = 1080f32;
+    let image_width = aspect_ratio * image_height;
 
-    let vh = 2f32;
-    let vw = aspect_ratio * vh;
-    let mut focal_length = 1f32;
+    let mut camera = camera::Camera::new(aspect_ratio);
 
-    let mut origin = Vec3::default();
-    let horizontal = Vec3 {
-        x: vw,
-        y: 0f32,
-        z: 0f32,
-    };
-    let vertical = Vec3 {
-        x: 0f32,
-        y: vh,
-        z: 0f32,
-    };
-    let mut lower_left_corner = origin
-        - horizontal / 2f32
-        - vertical / 2f32
-        - Vec3 {
-            x: 0f32,
-            y: 0f32,
-            z: focal_length,
-        };
-
-    let mut img = RgbImage::new(width as u32, height as u32);
+    let mut img = RgbImage::new(image_width as u32, image_height as u32);
     let w = vec![
         shapes::Sphere {
             radius: 0.5f32,
@@ -84,14 +63,10 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
         match rx.recv() {
             Ok(gui::MessageToRender::Render) => {
                 for (x, y, p) in img.enumerate_pixels_mut() {
-                    let y = height as u32 - y - 1;
-                    let u = (x as f32) / (width - 1f32);
-                    let v = (y as f32) / (height - 1f32);
-                    let r = Ray {
-                        origin,
-                        direction: (lower_left_corner + u * horizontal + v * vertical - origin)
-                            .unit_vector(),
-                    };
+                    let y = image_height as u32 - y - 1;
+                    let u = (x as f32) / (image_width - 1f32);
+                    let v = (y as f32) / (image_height - 1f32);
+                    let r = camera.get_ray(u, v);
                     *p = match w.seen(&r) {
                         Some((_, normal)) => Color {
                             r: normal.x,
@@ -107,27 +82,9 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
                 let egui_img = eframe::egui::ColorImage::from_rgb(size, &imgbuff);
                 tx.send(MessageToGUI::ImageRendered(egui_img)).unwrap();
             }
-            Ok(gui::MessageToRender::UpdateCameraOrigin(origin_new)) => {
-                origin = origin_new;
-                lower_left_corner = origin
-                    - horizontal / 2f32
-                    - vertical / 2f32
-                    - Vec3 {
-                        x: 0f32,
-                        y: 0f32,
-                        z: focal_length,
-                    };
-            }
-            Ok(gui::MessageToRender::UpdateCameraFocalLength(focal_length_new)) => {
-                focal_length = focal_length_new;
-                lower_left_corner = origin
-                    - horizontal / 2f32
-                    - vertical / 2f32
-                    - Vec3 {
-                        x: 0f32,
-                        y: 0f32,
-                        z: focal_length,
-                    };
+            Ok(gui::MessageToRender::UpdateCameraOrigin(origin)) => camera.set_origin(origin),
+            Ok(gui::MessageToRender::UpdateCameraFocalLength(focal_length)) => {
+                camera.set_focal_length(focal_length)
             }
             Err(_) => return,
         }
