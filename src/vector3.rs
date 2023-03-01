@@ -26,6 +26,13 @@ impl Vec3 {
         self.x.powi(2) + self.y.powi(2) + self.z.powi(2)
     }
 
+    pub fn get_rotation_from(&self, other: &Self) -> (Vec3, f32) {
+        (
+            (*self * *other).unit_vector(),
+            (*self % *other / (self.length() * other.length())).asin(),
+        )
+    }
+
     pub fn inverse(&self) -> Self {
         -1f32 * *self
     }

@@ -7,22 +7,41 @@ mod ray;
 mod shapes;
 pub mod vector3;
 use color::Color;
+use glam::f32::Vec3A;
 use ray::Ray;
 use shapes::Seeable;
 use std::sync::mpsc;
 use std::thread::spawn;
-use vector3::Vec3;
 mod gui;
+use glam::Quat;
 use log::{info, warn};
 
-fn ray_color<T: Seeable>(ray: &Ray, world: &T) -> Color {
+fn ray_color<T: Seeable>(ray: &Ray, world: &T, depth: u32) -> Color {
+    if depth == 0 {
+        return color::BLACK;
+    }
     match world.seen(&ray) {
         Some((point, normal)) => {
-            let rp = (Vec3::from_slice(UnitSphere.sample(&mut rand::thread_rng())) + Vec3 {y: 0.5,..Default::default()}).unit_vector();
-            if rp.z <
+            // get a random point in the unit sphere around origin and move it up by 1.0 along y
+            // axis. Result should be a random point on the unit sphere centered at (0, 1, 0)
+            let rp = Vec3A::from_slice(&UnitSphere.sample(&mut rand::thread_rng()))
+                + Vec3A::new(0f32, 1f32, 0f32);
+            // get rotation between normal at intersected point and +ve Y axis
+            let rotation = Quat::from_rotation_arc(Vec3A::Y.into(), normal.into());
+            // apply rotation to random point and then offset it by the intersection point. Result
+            // should be valid lambertian direction vector.
+            let rp = rotation * rp + point;
+            0.5 * ray_color(
+                &Ray {
+                    origin: point,
+                    direction: rp.normalize_or_zero(),
+                },
+                world,
+                depth - 1,
+            )
         }
         None => {
-            let t = ray.direction.unit_vector().y;
+            let t = ray.direction.normalize_or_zero().y;
             (1f32 - t) * color::WHITE
                 + t * Color {
                     r: 0.5,
@@ -48,7 +67,7 @@ fn main() {
 fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGUI>) {
     let aspect_ratio = 16f32 / 9f32;
     let image_height = 360f32;
-    let max_bounces = 5;
+    let max_bounces = 50;
     let image_width = aspect_ratio * image_height;
 
     let mut camera = camera::Camera::new(aspect_ratio);
@@ -58,19 +77,11 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
     let world = vec![
         shapes::Sphere {
             radius: 0.5f32,
-            center: Vec3 {
-                x: 0f32,
-                y: 0f32,
-                z: -1f32,
-            },
+            center: Vec3A::new(0f32, -0.5f32, -1f32),
         },
         shapes::Sphere {
             radius: 100f32,
-            center: Vec3 {
-                x: 0f32,
-                y: -101f32,
-                z: -1f32,
-            },
+            center: Vec3A::new(0f32, -101f32, -1f32),
         },
     ];
 
@@ -85,10 +96,12 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
                         let u = (x as f32 + rng.gen_range(0f32..1f32)) / (image_width - 1f32);
                         let v = (y as f32 + rng.gen_range(0f32..1f32)) / (image_height - 1f32);
                         let r = camera.get_ray(u, v);
-                        let mut depth = max_bounces;
-                        pix_color += ray_color(&r, &world);
+                        pix_color += ray_color(&r, &world, max_bounces);
                     }
-                    pix_color = pix_color / sample_count as f32;
+                    let scale = 1f32 / sample_count as f32;
+                    pix_color.r = (pix_color.r * scale).sqrt();
+                    pix_color.g = (pix_color.g * scale).sqrt();
+                    pix_color.b = (pix_color.b * scale).sqrt();
                     *p = pix_color.to_image_rgb();
                 }
                 let size = [img.width() as usize, img.height() as usize];

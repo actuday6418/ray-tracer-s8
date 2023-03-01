@@ -2,11 +2,12 @@ use eframe::egui;
 use egui_extras::image::RetainedImage;
 use std::sync::mpsc;
 
-use crate::{vector3::Vec3, MessageToGUI};
+use crate::MessageToGUI;
+use glam::f32::Vec3A;
 
 pub enum MessageToRender {
     Render,
-    UpdateCameraOrigin(Vec3),
+    UpdateCameraOrigin(Vec3A),
     UpdateCameraFocalLength(f32),
     UpdateSampleCount(u32),
     SaveImage,
@@ -87,11 +88,11 @@ impl eframe::App for MyApp {
                         || z.changed() && !z.dragged()
                     {
                         self.tx
-                            .send(MessageToRender::UpdateCameraOrigin(Vec3 {
-                                x: self.origin_x,
-                                y: self.origin_y,
-                                z: self.origin_z,
-                            }))
+                            .send(MessageToRender::UpdateCameraOrigin(Vec3A::new(
+                                self.origin_x,
+                                self.origin_y,
+                                self.origin_z,
+                            )))
                             .unwrap();
                         self.tx.send(MessageToRender::Render).unwrap();
                     }
