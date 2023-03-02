@@ -26,7 +26,9 @@ fn ray_color<T: IntersectableContainer>(
     }
     match world.intersect(&ray) {
         Some(table) => {
-            let scatter_direction = Vec3A::from_slice(&UnitSphere.sample(rng)) + table.normal;
+            let diffuse_dir = Vec3A::from_slice(&UnitSphere.sample(rng)) + table.normal;
+            let glossy_dir = ray.direction - 2f32 * ray.direction.dot(table.normal) * table.normal;
+            let scatter_direction = diffuse_dir + table.roughness * (glossy_dir - diffuse_dir);
             table.albedo.blend(&ray_color(
                 &Ray {
                     origin: table.point,
@@ -77,6 +79,18 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
             center: Vec3A::new(0f32, -0.5f32, -1f32),
             f_roughness_at: |_| 1.0,
             f_albedo_at: |_| color::RED,
+        },
+        shapes::Sphere {
+            radius: 0.25f32,
+            center: Vec3A::new(0.75f32, -0.25f32, -1.2),
+            f_roughness_at: |_| 0.3,
+            f_albedo_at: |_| color::WHITE,
+        },
+        shapes::Sphere {
+            radius: 0.3f32,
+            center: Vec3A::new(-0.75f32, -0.7f32, -0.8),
+            f_roughness_at: |_| 0.9,
+            f_albedo_at: |_| color::WHITE,
         },
         shapes::Sphere {
             radius: 100f32,
