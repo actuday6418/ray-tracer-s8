@@ -122,7 +122,7 @@ impl eframe::App for MyApp {
                         self.tx.send(MessageToRender::Render).unwrap()
                     }
                     if let Some(time) = self.image_time {
-                        ui.label(format!("fps: {} {}", 1000f32 / time as f32, time));
+                        ui.label(format!("fps: {:.3}", 1000f32 / time as f32));
                     }
                 });
                 ui.horizontal(|ui| {

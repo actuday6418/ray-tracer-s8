@@ -16,6 +16,14 @@ impl Color {
             (self.b * 255.999) as u8,
         ])
     }
+
+    pub fn blend(&self, other: &Self) -> Self {
+        Self {
+            r: self.r * other.r,
+            g: self.g * other.g,
+            b: self.b * other.b,
+        }
+    }
 }
 
 impl ops::Add for Color {

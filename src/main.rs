@@ -1,5 +1,5 @@
 use image::RgbImage;
-use rand::Rng;
+use rand::{rngs::ThreadRng, Rng};
 use rand_distr::{Distribution, UnitSphere};
 mod camera;
 mod color;
@@ -9,29 +9,33 @@ pub mod vector3;
 use color::Color;
 use glam::f32::Vec3A;
 use ray::Ray;
-use shapes::Seeable;
 use std::sync::mpsc;
 use std::thread::spawn;
 mod gui;
-use glam::Quat;
 use log::{info, warn};
+use shapes::IntersectableContainer;
 
-fn ray_color<T: Seeable>(ray: &Ray, world: &T, depth: u32) -> Color {
+fn ray_color<T: IntersectableContainer>(
+    ray: &Ray,
+    world: &T,
+    depth: u32,
+    rng: &mut ThreadRng,
+) -> Color {
     if depth == 0 {
         return color::BLACK;
     }
-    match world.seen(&ray) {
-        Some((point, normal)) => {
-            let target_pt =
-                Vec3A::from_slice(&UnitSphere.sample(&mut rand::thread_rng())) + point + normal;
-            0.5 * ray_color(
+    match world.intersect(&ray) {
+        Some(table) => {
+            let scatter_direction = Vec3A::from_slice(&UnitSphere.sample(rng)) + table.normal;
+            table.albedo.blend(&ray_color(
                 &Ray {
-                    origin: point,
-                    direction: (target_pt - point).normalize_or_zero(),
+                    origin: table.point,
+                    direction: scatter_direction.try_normalize().unwrap_or(table.normal),
                 },
                 world,
                 depth - 1,
-            )
+                rng,
+            ))
         }
         None => {
             let t = ray.direction.normalize_or_zero().y;
@@ -71,10 +75,14 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
         shapes::Sphere {
             radius: 0.5f32,
             center: Vec3A::new(0f32, -0.5f32, -1f32),
+            f_roughness_at: |_| 1.0,
+            f_albedo_at: |_| color::RED,
         },
         shapes::Sphere {
             radius: 100f32,
             center: Vec3A::new(0f32, -101f32, -1f32),
+            f_roughness_at: |_| 0.0,
+            f_albedo_at: |_| color::GREEN,
         },
     ];
 
@@ -90,12 +98,11 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
                         let u = (x as f32 + rng.gen_range(0f32..1f32)) / (image_width - 1f32);
                         let v = (y as f32 + rng.gen_range(0f32..1f32)) / (image_height - 1f32);
                         let r = camera.get_ray(u, v);
-                        pix_color += ray_color(&r, &world, max_bounces);
+                        pix_color += ray_color(&r, &world, max_bounces, &mut rng);
                     }
-                    let scale = 1f32 / sample_count as f32;
-                    pix_color.r = (pix_color.r * scale).sqrt();
-                    pix_color.g = (pix_color.g * scale).sqrt();
-                    pix_color.b = (pix_color.b * scale).sqrt();
+                    pix_color.r = (pix_color.r / sample_count as f32).sqrt();
+                    pix_color.g = (pix_color.g / sample_count as f32).sqrt();
+                    pix_color.b = (pix_color.b / sample_count as f32).sqrt();
                     *p = pix_color.to_image_rgb();
                 }
                 let size = [img.width() as usize, img.height() as usize];
