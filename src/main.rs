@@ -22,19 +22,12 @@ fn ray_color<T: Seeable>(ray: &Ray, world: &T, depth: u32) -> Color {
     }
     match world.seen(&ray) {
         Some((point, normal)) => {
-            // get a random point in the unit sphere around origin and move it up by 1.0 along y
-            // axis. Result should be a random point on the unit sphere centered at (0, 1, 0)
-            let rp = Vec3A::from_slice(&UnitSphere.sample(&mut rand::thread_rng()))
-                + Vec3A::new(0f32, 1f32, 0f32);
-            // get rotation between normal at intersected point and +ve Y axis
-            let rotation = Quat::from_rotation_arc(Vec3A::Y.into(), normal.into());
-            // apply rotation to random point and then offset it by the intersection point. Result
-            // should be valid lambertian direction vector.
-            let rp = rotation * rp + point;
+            let target_pt =
+                Vec3A::from_slice(&UnitSphere.sample(&mut rand::thread_rng())) + point + normal;
             0.5 * ray_color(
                 &Ray {
                     origin: point,
-                    direction: rp.normalize_or_zero(),
+                    direction: (target_pt - point).normalize_or_zero(),
                 },
                 world,
                 depth - 1,
@@ -53,7 +46,7 @@ fn ray_color<T: Seeable>(ray: &Ray, world: &T, depth: u32) -> Color {
 }
 
 pub enum MessageToGUI {
-    Rendered(eframe::egui::ColorImage),
+    Rendered(eframe::egui::ColorImage, u128),
 }
 
 fn main() {
@@ -67,7 +60,7 @@ fn main() {
 fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGUI>) {
     let aspect_ratio = 16f32 / 9f32;
     let image_height = 360f32;
-    let max_bounces = 50;
+    let max_bounces = 10;
     let image_width = aspect_ratio * image_height;
 
     let mut camera = camera::Camera::new(aspect_ratio);
@@ -89,6 +82,7 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
     loop {
         match rx.recv() {
             Ok(gui::MessageToRender::Render) => {
+                let now = std::time::Instant::now();
                 for (x, y, p) in img.enumerate_pixels_mut() {
                     let y = image_height as u32 - y - 1;
                     let mut pix_color = color::BLACK;
@@ -107,7 +101,8 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
                 let size = [img.width() as usize, img.height() as usize];
                 let imgbuff = img.clone().into_raw();
                 let egui_img = eframe::egui::ColorImage::from_rgb(size, &imgbuff);
-                tx.send(MessageToGUI::Rendered(egui_img)).unwrap();
+                tx.send(MessageToGUI::Rendered(egui_img, now.elapsed().as_millis()))
+                    .unwrap();
             }
             Ok(gui::MessageToRender::UpdateCameraOrigin(origin)) => camera.set_origin(origin),
             Ok(gui::MessageToRender::UpdateCameraFocalLength(focal_length)) => {

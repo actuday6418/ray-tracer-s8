@@ -30,6 +30,7 @@ struct MyApp {
     tx: mpsc::Sender<MessageToRender>,
     rx: mpsc::Receiver<MessageToGUI>,
     image: Option<RetainedImage>,
+    image_time: Option<u128>,
     origin_x: f32,
     origin_y: f32,
     origin_z: f32,
@@ -45,6 +46,7 @@ impl MyApp {
             tx,
             rx,
             image: None,
+            image_time: None,
             origin_x: 0f32,
             origin_y: 0f32,
             origin_z: 0f32,
@@ -57,8 +59,9 @@ impl MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
-        if let Ok(MessageToGUI::Rendered(image)) = self.rx.try_recv() {
+        if let Ok(MessageToGUI::Rendered(image, time)) = self.rx.try_recv() {
             self.image = Some(RetainedImage::from_color_image("rendered image", image));
+            self.image_time = Some(time);
         }
         egui::TopBottomPanel::top("Controls")
             .frame(egui::Frame::default().outer_margin(5f32))
@@ -117,6 +120,9 @@ impl eframe::App for MyApp {
                             .send(MessageToRender::UpdateSampleCount(self.sample_count))
                             .unwrap();
                         self.tx.send(MessageToRender::Render).unwrap()
+                    }
+                    if let Some(time) = self.image_time {
+                        ui.label(format!("fps: {} {}", 1000f32 / time as f32, time));
                     }
                 });
                 ui.horizontal(|ui| {
