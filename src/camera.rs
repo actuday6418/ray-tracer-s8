@@ -129,7 +129,7 @@ impl Camera {
         .at(self.focus_distance);
         // return ray, from random point in the disk, to the focal point
         Ray {
-            origin: self.origin,
+            origin: self.origin + offset,
             direction: (focal_point - self.origin - offset).normalize_or_zero(),
         }
     }
