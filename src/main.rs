@@ -1,5 +1,6 @@
 use image::RgbImage;
-use rand::{rngs::ThreadRng, Rng};
+use rand::rngs::ThreadRng;
+use rand::Rng;
 use rand_distr::{Distribution, UnitSphere};
 mod camera;
 mod color;
@@ -9,11 +10,11 @@ pub mod vector3;
 use color::Color;
 use glam::f32::Vec3A;
 use ray::Ray;
-use std::sync::mpsc;
 use std::thread::spawn;
+use std::{f32::consts::PI, sync::mpsc};
 mod gui;
 use log::{info, warn};
-use shapes::IntersectableContainer;
+use shapes::{IntersectableContainer, PropertyAt};
 
 fn ray_color<T: IntersectableContainer>(
     ray: &Ray,
@@ -69,38 +70,64 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
     let max_bounces = 10;
     let image_width = aspect_ratio * image_height;
 
-    let mut camera = camera::Camera::new(aspect_ratio);
+    let mut camera = camera::Camera::new(
+        Vec3A::ZERO,
+        aspect_ratio,
+        0.1f32,
+        1f32,
+        PI / 2f32,
+        1f32,
+        image_height,
+    );
     let mut sample_count: u32 = 5;
 
     let mut img = RgbImage::new(image_width as u32, image_height as u32);
-    let world = vec![
+    let mut rng = rand::thread_rng();
+    let mut world = vec![
         shapes::Sphere {
             radius: 0.5f32,
             center: Vec3A::new(0f32, -0.5f32, -1f32),
-            f_roughness_at: |_| 1.0,
-            f_albedo_at: |_| color::RED,
+            p_roughness_at: PropertyAt::Value(1.0),
+            p_albedo_at: PropertyAt::Value(color::RED),
         },
         shapes::Sphere {
             radius: 0.25f32,
             center: Vec3A::new(0.75f32, -0.25f32, -1.2),
-            f_roughness_at: |_| 0.3,
-            f_albedo_at: |_| color::WHITE,
+            p_roughness_at: PropertyAt::Value(0.3),
+            p_albedo_at: PropertyAt::Value(color::WHITE),
         },
         shapes::Sphere {
             radius: 0.3f32,
             center: Vec3A::new(-0.75f32, -0.7f32, -0.8),
-            f_roughness_at: |_| 0.9,
-            f_albedo_at: |_| color::WHITE,
+            p_roughness_at: PropertyAt::Value(0.9),
+            p_albedo_at: PropertyAt::Value(color::WHITE),
+        },
+        shapes::Sphere {
+            radius: 0.05f32,
+            center: Vec3A::new(0f32, -0.91f32, -0.02),
+            p_roughness_at: PropertyAt::Value(0.9),
+            p_albedo_at: PropertyAt::Value(color::BLACK),
         },
         shapes::Sphere {
             radius: 100f32,
             center: Vec3A::new(0f32, -101f32, -1f32),
-            f_roughness_at: |_| 0.0,
-            f_albedo_at: |_| color::GREEN,
+            p_roughness_at: PropertyAt::Value(0.0),
+            p_albedo_at: PropertyAt::Value(color::GREEN),
         },
     ];
+    for _ in 0..10 {
+        world.push(shapes::Sphere {
+            radius: rng.gen_range(0.1f32..0.3f32),
+            center: Vec3A::new(
+                rng.gen_range(-3f32..3f32),
+                rng.gen_range(-1f32..1f32),
+                rng.gen_range(-8f32..0f32),
+            ),
+            p_roughness_at: PropertyAt::Value(rng.gen_range(0f32..1f32)),
+            p_albedo_at: PropertyAt::Value(Color::random()),
+        })
+    }
 
-    let mut rng = rand::thread_rng();
     loop {
         match rx.recv() {
             Ok(gui::MessageToRender::Render) => {
@@ -109,9 +136,7 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
                     let y = image_height as u32 - y - 1;
                     let mut pix_color = color::BLACK;
                     for _ in 0..sample_count {
-                        let u = (x as f32 + rng.gen_range(0f32..1f32)) / (image_width - 1f32);
-                        let v = (y as f32 + rng.gen_range(0f32..1f32)) / (image_height - 1f32);
-                        let r = camera.get_ray(u, v);
+                        let r = camera.get_ray(x, y, &mut rng);
                         pix_color += ray_color(&r, &world, max_bounces, &mut rng);
                     }
                     pix_color.r = (pix_color.r / sample_count as f32).sqrt();
@@ -126,8 +151,8 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
                     .unwrap();
             }
             Ok(gui::MessageToRender::UpdateCameraOrigin(origin)) => camera.set_origin(origin),
-            Ok(gui::MessageToRender::UpdateCameraFocalLength(focal_length)) => {
-                camera.set_focal_length(focal_length)
+            Ok(gui::MessageToRender::UpdateCameraFieldOfView(field_of_view)) => {
+                camera.set_field_of_view(field_of_view)
             }
             Ok(gui::MessageToRender::UpdateSampleCount(sample_count_new)) => {
                 sample_count = sample_count_new
@@ -145,6 +170,15 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
                 } else {
                     info!("Render saved")
                 }
+            }
+            Ok(gui::MessageToRender::UpdateCameraAperture(aperture)) => {
+                camera.set_aperture(aperture)
+            }
+            Ok(gui::MessageToRender::UpdateCameraFocalLength(focal_length)) => {
+                camera.set_focal_length(focal_length)
+            }
+            Ok(gui::MessageToRender::UpdateCameraFocusDistance(focus_dstance)) => {
+                camera.set_focus_distance(focus_dstance)
             }
             Err(_) => return,
         }

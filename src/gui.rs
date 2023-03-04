@@ -1,6 +1,6 @@
 use eframe::egui;
 use egui_extras::image::RetainedImage;
-use std::sync::mpsc;
+use std::{f32::consts::PI, sync::mpsc};
 
 use crate::MessageToGUI;
 use glam::f32::Vec3A;
@@ -8,14 +8,17 @@ use glam::f32::Vec3A;
 pub enum MessageToRender {
     Render,
     UpdateCameraOrigin(Vec3A),
+    UpdateCameraFieldOfView(f32),
+    UpdateCameraAperture(f32),
     UpdateCameraFocalLength(f32),
+    UpdateCameraFocusDistance(f32),
     UpdateSampleCount(u32),
     SaveImage,
 }
 
 pub fn launch(tx: mpsc::Sender<MessageToRender>, rx: mpsc::Receiver<MessageToGUI>) {
     let options = eframe::NativeOptions {
-        initial_window_size: Some(egui::vec2(640.0, 440.0)),
+        initial_window_size: Some(egui::vec2(640.0, 475.0)),
         ..Default::default()
     };
     eframe::run_native(
@@ -35,6 +38,9 @@ struct MyApp {
     origin_y: f32,
     origin_z: f32,
     focal_length: f32,
+    field_of_view: f32,
+    focus_distance: f32,
+    aperture: f32,
     image_scale: f32,
     sample_count: u32,
 }
@@ -51,6 +57,9 @@ impl MyApp {
             origin_y: 0f32,
             origin_z: 0f32,
             focal_length: 1f32,
+            field_of_view: PI / 2f32,
+            focus_distance: 1f32,
+            aperture: 0.1f32,
             image_scale: 0.97,
             sample_count: 5,
         }
@@ -101,11 +110,42 @@ impl eframe::App for MyApp {
                     }
                 });
                 ui.horizontal(|ui| {
+                    ui.label("Camera field of view");
+                    let f = ui.add(egui::DragValue::new(&mut self.field_of_view).speed(0.02));
+                    if f.drag_released() || f.changed() && !f.dragged() {
+                        self.tx
+                            .send(MessageToRender::UpdateCameraFieldOfView(self.field_of_view))
+                            .unwrap();
+                        self.tx.send(MessageToRender::Render).unwrap()
+                    }
+                    ui.separator();
+                    ui.label("Camera aperture");
+                    let f = ui.add(egui::DragValue::new(&mut self.aperture).speed(0.02));
+                    if f.drag_released() || f.changed() && !f.dragged() {
+                        self.tx
+                            .send(MessageToRender::UpdateCameraAperture(self.aperture))
+                            .unwrap();
+                        self.tx.send(MessageToRender::Render).unwrap()
+                    }
+                });
+                ui.horizontal(|ui| {
                     ui.label("Camera focal length");
                     let f = ui.add(egui::DragValue::new(&mut self.focal_length).speed(0.02));
                     if f.drag_released() || f.changed() && !f.dragged() {
                         self.tx
                             .send(MessageToRender::UpdateCameraFocalLength(self.focal_length))
+                            .unwrap();
+                        self.tx.send(MessageToRender::Render).unwrap()
+                    }
+                    ui.separator();
+
+                    ui.label("Camera focus distance");
+                    let f = ui.add(egui::DragValue::new(&mut self.focus_distance).speed(0.02));
+                    if f.drag_released() || f.changed() && !f.dragged() {
+                        self.tx
+                            .send(MessageToRender::UpdateCameraFocusDistance(
+                                self.focus_distance,
+                            ))
                             .unwrap();
                         self.tx.send(MessageToRender::Render).unwrap()
                     }

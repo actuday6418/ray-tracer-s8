@@ -104,11 +104,20 @@ where
 }
 
 #[derive(Debug, PartialEq)]
+pub enum PropertyAt<T>
+where
+    T: Clone,
+{
+    Value(T),
+    FromFunction(fn(Vec3A) -> T),
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Sphere {
     pub radius: f32,
     pub center: Vec3A,
-    pub f_albedo_at: fn(Vec3A) -> Color,
-    pub f_roughness_at: fn(Vec3A) -> f32,
+    pub p_albedo_at: PropertyAt<Color>,
+    pub p_roughness_at: PropertyAt<f32>,
 }
 
 impl Intersectable for Sphere {
@@ -124,11 +133,16 @@ impl Intersectable for Sphere {
     }
 
     fn roughness_at(&self, point: Vec3A) -> f32 {
-        let f = self.f_roughness_at;
-        f(point)
+        match self.p_roughness_at {
+            PropertyAt::Value(value) => value,
+            PropertyAt::FromFunction(f) => f(point),
+        }
     }
+
     fn albedo_at(&self, point: Vec3A) -> Color {
-        let f = self.f_albedo_at;
-        f(point)
+        match &self.p_albedo_at {
+            PropertyAt::Value(value) => value.clone(),
+            PropertyAt::FromFunction(f) => f(point),
+        }
     }
 }

@@ -1,4 +1,5 @@
 use image::Rgb;
+use rand::{thread_rng, Rng};
 use std::ops;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -22,6 +23,15 @@ impl Color {
             r: self.r * other.r,
             g: self.g * other.g,
             b: self.b * other.b,
+        }
+    }
+
+    pub fn random() -> Self {
+        let mut rng = thread_rng();
+        Self {
+            r: rng.gen_range(0f32..1f32),
+            g: rng.gen_range(0f32..1f32),
+            b: rng.gen_range(0f32..1f32),
         }
     }
 }
