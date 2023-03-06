@@ -1,8 +1,9 @@
 use bvh::bvh::BVH;
 use bvh::{Point3, Vector3};
 use image::RgbImage;
-use rand::rngs::ThreadRng;
+use rand::rngs::SmallRng;
 use rand::Rng;
+use rand::SeedableRng;
 use rand_distr::{Distribution, UnitSphere};
 mod camera;
 mod color;
@@ -20,7 +21,7 @@ fn ray_color<T: Intersectable>(
     ray: &Ray,
     world: &Vec<T>,
     depth: u32,
-    rng: &mut ThreadRng,
+    rng: &mut SmallRng,
     bvh: &BVH,
 ) -> Color
 where
@@ -31,7 +32,6 @@ where
     }
     let world_sub = bvh.traverse(ray, world);
     match world_sub.intersect(&ray) {
-        // match world.intersect(&ray) {
         Some(table) => {
             let diffuse_dir = Vector3::from_slice(&UnitSphere.sample(rng)) + table.normal;
             let glossy_dir = ray.direction - 2f32 * ray.direction.dot(table.normal) * table.normal;
@@ -88,9 +88,8 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
     );
     let mut sample_count: u32 = 5;
 
-    // let mut img = RgbImage::new(image_width as u32, image_height as u32);
     let mut img_buff = vec![0u8; image_width as usize * image_height as usize * 3];
-    let mut rng = rand::thread_rng();
+    let mut rng = SmallRng::from_entropy();
     let mut world = vec![
         shapes::Sphere::new(
             0.5f32,
@@ -146,7 +145,7 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
                     .par_chunks_exact_mut(image_width as usize * 3)
                     .enumerate()
                     .for_each(|(y, row)| {
-                        let mut rng = rand::thread_rng();
+                        let mut rng = SmallRng::from_entropy();
                         for (x, p) in row.chunks_exact_mut(3).enumerate() {
                             let y = image_height as usize - y - 1;
                             let mut pix_color = color::BLACK;

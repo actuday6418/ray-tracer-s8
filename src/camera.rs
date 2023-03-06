@@ -1,5 +1,5 @@
 use bvh::{ray::Ray, Point3, Vector3};
-use rand::{rngs::ThreadRng, Rng};
+use rand::{rngs::SmallRng, Rng};
 use rand_distr::{Distribution, UnitDisc};
 
 pub struct Camera {
@@ -106,7 +106,7 @@ impl Camera {
         )
     }
 
-    pub fn get_ray(&self, x: u32, y: u32, rng: &mut ThreadRng) -> Ray {
+    pub fn get_ray(&self, x: u32, y: u32, rng: &mut SmallRng) -> Ray {
         let lens_radius = self.aperture / 2f32;
         let offset = Vector3::from_slice({
             let [a, b]: [f32; 2] = UnitDisc.sample(rng);
