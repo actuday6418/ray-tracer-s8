@@ -1,43 +1,50 @@
+use bvh::bvh::BVH;
+use bvh::{Point3, Vector3};
 use image::RgbImage;
 use rand::rngs::ThreadRng;
 use rand::Rng;
 use rand_distr::{Distribution, UnitSphere};
 mod camera;
 mod color;
-mod ray;
 mod shapes;
-pub mod vector3;
+use bvh::ray::Ray;
 use color::Color;
-use glam::f32::Vec3A;
-use ray::Ray;
-use std::thread::spawn;
-use std::{f32::consts::PI, sync::mpsc};
+use rayon::prelude::{IndexedParallelIterator, ParallelIterator};
+use rayon::slice::ParallelSliceMut;
+use std::{f32::consts::PI, sync::mpsc, thread::spawn};
 mod gui;
 use log::{info, warn};
-use shapes::{IntersectableContainer, PropertyAt};
+use shapes::{Intersectable, IntersectableContainer, PropertyAt};
 
-fn ray_color<T: IntersectableContainer>(
+fn ray_color<T: Intersectable>(
     ray: &Ray,
-    world: &T,
+    world: &Vec<T>,
     depth: u32,
     rng: &mut ThreadRng,
-) -> Color {
+    bvh: &BVH,
+) -> Color
+where
+    Vec<T>: IntersectableContainer,
+{
     if depth == 0 {
         return color::BLACK;
     }
-    match world.intersect(&ray) {
+    let world_sub = bvh.traverse(ray, world);
+    match world_sub.intersect(&ray) {
+        // match world.intersect(&ray) {
         Some(table) => {
-            let diffuse_dir = Vec3A::from_slice(&UnitSphere.sample(rng)) + table.normal;
+            let diffuse_dir = Vector3::from_slice(&UnitSphere.sample(rng)) + table.normal;
             let glossy_dir = ray.direction - 2f32 * ray.direction.dot(table.normal) * table.normal;
             let scatter_direction = diffuse_dir + table.roughness * (glossy_dir - diffuse_dir);
             table.albedo.blend(&ray_color(
-                &Ray {
-                    origin: table.point,
-                    direction: scatter_direction.try_normalize().unwrap_or(table.normal),
-                },
+                &Ray::new(
+                    table.point,
+                    scatter_direction.try_normalize().unwrap_or(table.normal),
+                ),
                 world,
                 depth - 1,
                 rng,
+                bvh,
             ))
         }
         None => {
@@ -71,7 +78,7 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
     let image_width = aspect_ratio * image_height;
 
     let mut camera = camera::Camera::new(
-        Vec3A::ZERO,
+        Point3::ZERO,
         aspect_ratio,
         0.1f32,
         1f32,
@@ -81,72 +88,82 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
     );
     let mut sample_count: u32 = 5;
 
-    let mut img = RgbImage::new(image_width as u32, image_height as u32);
+    // let mut img = RgbImage::new(image_width as u32, image_height as u32);
+    let mut img_buff = vec![0u8; image_width as usize * image_height as usize * 3];
     let mut rng = rand::thread_rng();
     let mut world = vec![
-        shapes::Sphere {
-            radius: 0.5f32,
-            center: Vec3A::new(0f32, -0.5f32, -1f32),
-            p_roughness_at: PropertyAt::Value(1.0),
-            p_albedo_at: PropertyAt::Value(color::RED),
-        },
-        shapes::Sphere {
-            radius: 0.25f32,
-            center: Vec3A::new(0.75f32, -0.25f32, -1.2),
-            p_roughness_at: PropertyAt::Value(0.3),
-            p_albedo_at: PropertyAt::Value(color::WHITE),
-        },
-        shapes::Sphere {
-            radius: 0.3f32,
-            center: Vec3A::new(-0.75f32, -0.7f32, -0.8),
-            p_roughness_at: PropertyAt::Value(0.9),
-            p_albedo_at: PropertyAt::Value(color::WHITE),
-        },
-        shapes::Sphere {
-            radius: 0.05f32,
-            center: Vec3A::new(0f32, -0.91f32, -0.02),
-            p_roughness_at: PropertyAt::Value(0.9),
-            p_albedo_at: PropertyAt::Value(color::BLACK),
-        },
-        shapes::Sphere {
-            radius: 100f32,
-            center: Vec3A::new(0f32, -101f32, -1f32),
-            p_roughness_at: PropertyAt::Value(0.0),
-            p_albedo_at: PropertyAt::Value(color::GREEN),
-        },
+        shapes::Sphere::new(
+            0.5f32,
+            Point3::new(0f32, -0.5f32, -1f32),
+            PropertyAt::Value(1.0),
+            PropertyAt::Value(color::RED),
+        ),
+        shapes::Sphere::new(
+            0.25f32,
+            Point3::new(0.75f32, -0.25f32, -1.2),
+            PropertyAt::Value(0.3),
+            PropertyAt::Value(color::WHITE),
+        ),
+        shapes::Sphere::new(
+            0.3f32,
+            Point3::new(-0.75f32, -0.7f32, -0.8),
+            PropertyAt::Value(0.9),
+            PropertyAt::Value(color::WHITE),
+        ),
+        shapes::Sphere::new(
+            0.05f32,
+            Point3::new(0f32, -0.91f32, -0.02),
+            PropertyAt::Value(0.9),
+            PropertyAt::Value(color::BLACK),
+        ),
+        shapes::Sphere::new(
+            100f32,
+            Point3::new(0f32, -101f32, -1f32),
+            PropertyAt::Value(0.0),
+            PropertyAt::Value(color::GREEN),
+        ),
     ];
-    for _ in 0..10 {
-        world.push(shapes::Sphere {
-            radius: rng.gen_range(0.1f32..0.3f32),
-            center: Vec3A::new(
+    for _ in 0..300 {
+        world.push(shapes::Sphere::new(
+            rng.gen_range(0.1f32..0.3f32),
+            Point3::new(
                 rng.gen_range(-3f32..3f32),
                 rng.gen_range(-1f32..1f32),
-                rng.gen_range(-8f32..0f32),
+                rng.gen_range(-30f32..0f32),
             ),
-            p_roughness_at: PropertyAt::Value(rng.gen_range(0f32..1f32)),
-            p_albedo_at: PropertyAt::Value(Color::random()),
-        })
+            PropertyAt::Value(rng.gen_range(0f32..1f32)),
+            PropertyAt::Value(Color::random()),
+        ))
     }
+    let bvh = BVH::build(&mut world);
 
     loop {
         match rx.recv() {
             Ok(gui::MessageToRender::Render) => {
                 let now = std::time::Instant::now();
-                for (x, y, p) in img.enumerate_pixels_mut() {
-                    let y = image_height as u32 - y - 1;
-                    let mut pix_color = color::BLACK;
-                    for _ in 0..sample_count {
-                        let r = camera.get_ray(x, y, &mut rng);
-                        pix_color += ray_color(&r, &world, max_bounces, &mut rng);
-                    }
-                    pix_color.r = (pix_color.r / sample_count as f32).sqrt();
-                    pix_color.g = (pix_color.g / sample_count as f32).sqrt();
-                    pix_color.b = (pix_color.b / sample_count as f32).sqrt();
-                    *p = pix_color.to_image_rgb();
-                }
-                let size = [img.width() as usize, img.height() as usize];
-                let imgbuff = img.clone().into_raw();
-                let egui_img = eframe::egui::ColorImage::from_rgb(size, &imgbuff);
+
+                img_buff
+                    .par_chunks_exact_mut(image_width as usize * 3)
+                    .enumerate()
+                    .for_each(|(y, row)| {
+                        let mut rng = rand::thread_rng();
+                        for (x, p) in row.chunks_exact_mut(3).enumerate() {
+                            let y = image_height as usize - y - 1;
+                            let mut pix_color = color::BLACK;
+                            for _ in 0..sample_count {
+                                let r = camera.get_ray(x as u32, y as u32, &mut rng);
+                                pix_color += ray_color(&r, &world, max_bounces, &mut rng, &bvh);
+                            }
+                            pix_color.r = (pix_color.r / sample_count as f32).sqrt();
+                            pix_color.g = (pix_color.g / sample_count as f32).sqrt();
+                            pix_color.b = (pix_color.b / sample_count as f32).sqrt();
+                            [p[0], p[1], p[2]] = pix_color.as_slice();
+                        }
+                    });
+                let egui_img = eframe::egui::ColorImage::from_rgb(
+                    [image_width as usize, image_height as usize],
+                    &img_buff,
+                );
                 tx.send(MessageToGUI::Rendered(egui_img, now.elapsed().as_millis()))
                     .unwrap();
             }
@@ -158,6 +175,9 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
                 sample_count = sample_count_new
             }
             Ok(gui::MessageToRender::SaveImage) => {
+                let img =
+                    RgbImage::from_raw(image_width as u32, image_height as u32, img_buff.clone())
+                        .unwrap_or_default();
                 let hd = home::home_dir().map(|mut d| {
                     d.push("render.png");
                     d.into_os_string().to_str().unwrap().to_owned()

@@ -1,15 +1,14 @@
-use crate::ray::Ray;
-use glam::f32::Vec3A;
+use bvh::{ray::Ray, Point3, Vector3};
 use rand::{rngs::ThreadRng, Rng};
 use rand_distr::{Distribution, UnitDisc};
 
 pub struct Camera {
-    origin: Vec3A,
-    lower_left_corner: Vec3A,
-    horizontal: Vec3A,
+    origin: Point3,
+    lower_left_corner: Point3,
+    horizontal: Vector3,
     aspect_ratio: f32,
     image_height: f32,
-    vertical: Vec3A,
+    vertical: Vector3,
     aperture: f32,
     focal_length: f32,
     field_of_view: f32,
@@ -18,7 +17,7 @@ pub struct Camera {
 
 impl Camera {
     pub fn new(
-        origin: Vec3A,
+        origin: Point3,
         aspect_ratio: f32,
         aperture: f32,
         focus_distance: f32,
@@ -28,8 +27,8 @@ impl Camera {
     ) -> Self {
         let vh = 2.0 * (field_of_view / 2f32).tan();
         let vw = aspect_ratio * vh;
-        let horizontal = Vec3A::new(vw, 0f32, 0f32);
-        let vertical = Vec3A::new(0f32, vh, 0f32);
+        let horizontal = Vector3::new(vw, 0f32, 0f32);
+        let vertical = Vector3::new(0f32, vh, 0f32);
         Self {
             origin,
             horizontal,
@@ -43,7 +42,7 @@ impl Camera {
             lower_left_corner: origin
                 - horizontal / 2f32
                 - vertical / 2f32
-                - Vec3A::new(0f32, 0f32, focal_length),
+                - Vector3::new(0f32, 0f32, focal_length),
         }
     }
 
@@ -71,7 +70,7 @@ impl Camera {
         )
     }
 
-    pub fn set_origin(&mut self, origin: Vec3A) {
+    pub fn set_origin(&mut self, origin: Point3) {
         *self = Self::new(
             origin,
             self.aspect_ratio,
@@ -109,28 +108,23 @@ impl Camera {
 
     pub fn get_ray(&self, x: u32, y: u32, rng: &mut ThreadRng) -> Ray {
         let lens_radius = self.aperture / 2f32;
-        // sample a point from the disk with radius "lens_radius"
-        let offset = Vec3A::from_slice({
+        let offset = Vector3::from_slice({
             let [a, b]: [f32; 2] = UnitDisc.sample(rng);
             &[a * lens_radius, b * lens_radius, 0f32]
         });
-        // get viewport coordinates for pixel (randomised subpixel coordinates)
         let u =
             (x as f32 + rng.gen_range(0f32..1f32)) / (self.aspect_ratio * self.image_height - 1f32);
         let v = (y as f32 + rng.gen_range(0f32..1f32)) / (self.image_height - 1f32);
-        // get focal point (point at length "focus_distance" on the vector from origin to viewport
-        // coordinate)
-        let focal_point = Ray {
-            origin: self.origin,
-            direction: (self.lower_left_corner + u * self.horizontal + v * self.vertical
-                - self.origin)
+        let focal_point = Ray::new(
+            self.origin,
+            (self.lower_left_corner + u * self.horizontal + v * self.vertical - self.origin)
                 .normalize_or_zero(),
-        }
+        )
         .at(self.focus_distance);
-        // return ray, from random point in the disk, to the focal point
-        Ray {
-            origin: self.origin + offset,
-            direction: (focal_point - self.origin - offset).normalize_or_zero(),
-        }
+        let final_ray_origin = self.origin + offset;
+        Ray::new(
+            final_ray_origin,
+            (focal_point - final_ray_origin).normalize_or_zero(),
+        )
     }
 }

@@ -1,13 +1,12 @@
+use crate::MessageToGUI;
+use bvh::Point3;
 use eframe::egui;
 use egui_extras::image::RetainedImage;
 use std::{f32::consts::PI, sync::mpsc};
 
-use crate::MessageToGUI;
-use glam::f32::Vec3A;
-
 pub enum MessageToRender {
     Render,
-    UpdateCameraOrigin(Vec3A),
+    UpdateCameraOrigin(Point3),
     UpdateCameraFieldOfView(f32),
     UpdateCameraAperture(f32),
     UpdateCameraFocalLength(f32),
@@ -100,7 +99,7 @@ impl eframe::App for MyApp {
                         || z.changed() && !z.dragged()
                     {
                         self.tx
-                            .send(MessageToRender::UpdateCameraOrigin(Vec3A::new(
+                            .send(MessageToRender::UpdateCameraOrigin(Point3::new(
                                 self.origin_x,
                                 self.origin_y,
                                 self.origin_z,

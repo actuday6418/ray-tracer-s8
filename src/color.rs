@@ -1,4 +1,3 @@
-use image::Rgb;
 use rand::{thread_rng, Rng};
 use std::ops;
 
@@ -10,12 +9,12 @@ pub struct Color {
 }
 
 impl Color {
-    pub fn to_image_rgb(&self) -> Rgb<u8> {
-        Rgb::from([
+    pub fn as_slice(&self) -> [u8; 3] {
+        [
             (self.r * 255.999) as u8,
             (self.g * 255.999) as u8,
             (self.b * 255.999) as u8,
-        ])
+        ]
     }
 
     pub fn blend(&self, other: &Self) -> Self {
