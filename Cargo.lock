@@ -105,6 +105,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c99f64d1e06488f620f932677e24bc6e2897582980441ae90a671415bd7ec2f"
 dependencies = [
  "cfg-if",
+ "getrandom",
  "once_cell",
  "version_check",
 ]
@@ -1465,6 +1466,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "obj-rs"
+version = "0.6.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "296defd880abbe9e7707c9950375a99432faf97be9f7560d8e555e763040d7e2"
+dependencies = [
+ "num-traits",
+ "serde",
+ "vec_map",
+]
+
+[[package]]
 name = "objc"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1758,10 +1770,12 @@ dependencies = [
  "egui_extras",
  "glam",
  "home",
+ "obj-rs",
  "rand",
  "rand_distr",
  "rayon",
  "roots",
+ "tobj",
 ]
 
 [[package]]
@@ -2100,6 +2114,15 @@ name = "tinyvec_macros"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
+
+[[package]]
+name = "tobj"
+version = "3.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d0bde887a49e2e09f30ba3b454cdba3fbc971703e436c527f9f69a035b45b9b"
+dependencies = [
+ "ahash",
+]
 
 [[package]]
 name = "toml_datetime"

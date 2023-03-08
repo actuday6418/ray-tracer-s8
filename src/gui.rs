@@ -6,6 +6,7 @@ use std::{f32::consts::PI, sync::mpsc};
 
 pub enum MessageToRender {
     Render,
+    ReloadWorld,
     UpdateCameraOrigin(Point3),
     UpdateCameraFieldOfView(f32),
     UpdateCameraAperture(f32),
@@ -161,6 +162,10 @@ impl eframe::App for MyApp {
                     }
                     if let Some(time) = self.image_time {
                         ui.label(format!("fps: {:.3}", 1000f32 / time as f32));
+                    }
+                    if ui.button("↻").clicked() {
+                        self.tx.send(MessageToRender::ReloadWorld).unwrap();
+                        self.tx.send(MessageToRender::Render).unwrap()
                     }
                 });
                 ui.horizontal(|ui| {

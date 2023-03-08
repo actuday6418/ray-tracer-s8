@@ -17,6 +17,8 @@ home = "*"
 rand={version = "0.8.5", features=["small_rng"]}
 rand_distr = "*"
 # image = "*"
+obj-rs = "0.6"
+tobj = "*"
 eframe = "0.21.3"
 egui_extras = "*"
 roots = "0.0.8"

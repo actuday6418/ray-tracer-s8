@@ -17,6 +17,14 @@ impl Color {
         ]
     }
 
+    pub fn from_slice(s: [f32; 3]) -> Self {
+        Self {
+            r: s[0],
+            g: s[1],
+            b: s[2],
+        }
+    }
+
     pub fn blend(&self, other: &Self) -> Self {
         Self {
             r: self.r * other.r,
