@@ -1,6 +1,5 @@
 use bvh::bvh::BVH;
 use bvh::{Point3, Vector3};
-use image::RgbImage;
 use rand::rngs::SmallRng;
 use rand::Rng;
 use rand::SeedableRng;
@@ -12,48 +11,54 @@ use bvh::ray::Ray;
 use color::Color;
 use rayon::prelude::{IndexedParallelIterator, ParallelIterator};
 use rayon::slice::ParallelSliceMut;
+use shapes::mesh::Triangle;
+use shapes::sphere::Sphere;
 use std::{f32::consts::PI, sync::mpsc, thread::spawn};
 mod gui;
-use log::{info, warn};
-use shapes::{Intersectable, IntersectableContainer, PropertyAt};
+use shapes::{Object, PropertyAt, WorldList, WorldRefList};
 
-fn ray_color<T: Intersectable>(
-    ray: &Ray,
-    world: &Vec<T>,
-    depth: u32,
-    rng: &mut SmallRng,
-    bvh: &BVH,
-) -> Color
-where
-    Vec<T>: IntersectableContainer,
-{
+fn ray_color(ray: &Ray, world: &WorldList, depth: u32, rng: &mut SmallRng, bvh: &BVH) -> Color {
     if depth == 0 {
         return color::BLACK;
     }
-    let world_sub = bvh.traverse(ray, world);
-    match world_sub.intersect(&ray) {
+    let v = world.get();
+    let world_sub = bvh.traverse(ray, &v);
+    match WorldRefList::from_vec(world_sub).intersect(&ray) {
+        // match world.to_ref().intersect(&ray) {
         Some(table) => {
-            let diffuse_dir = Vector3::from_slice(&UnitSphere.sample(rng)) + table.normal;
-            let glossy_dir = ray.direction - 2f32 * ray.direction.dot(table.normal) * table.normal;
-            let scatter_direction = diffuse_dir + table.roughness * (glossy_dir - diffuse_dir);
-            table.albedo.blend(&ray_color(
-                &Ray::new(
-                    table.point,
-                    scatter_direction.try_normalize().unwrap_or(table.normal),
-                ),
-                world,
-                depth - 1,
-                rng,
-                bvh,
-            ))
+            if table.emission > 0f32 {
+                table.emission * table.albedo
+            } else {
+                let diffuse_dir = Vector3::from_slice(&UnitSphere.sample(rng)) + table.normal;
+                let glossy_dir =
+                    ray.direction - 2f32 * ray.direction.dot(table.normal) * table.normal;
+                let scatter_direction = diffuse_dir + table.roughness * (glossy_dir - diffuse_dir);
+                table.albedo.blend(&ray_color(
+                    &Ray::new(
+                        table.point,
+                        scatter_direction.try_normalize().unwrap_or(table.normal),
+                    ),
+                    world,
+                    depth - 1,
+                    rng,
+                    bvh,
+                ))
+            }
         }
-        None => {
+        None =>
+        // color::BLACK,
+        {
             let t = ray.direction.normalize_or_zero().y;
-            (1f32 - t) * color::WHITE
+            (1f32 - t)
+                * Color {
+                    r: 0.01,
+                    g: 0.02,
+                    b: 0.07,
+                }
                 + t * Color {
-                    r: 0.5,
-                    g: 0.7,
-                    b: 1.0,
+                    r: 0.02,
+                    g: 0.04,
+                    b: 0.1,
                 }
         }
     }
@@ -64,7 +69,6 @@ pub enum MessageToGUI {
 }
 
 fn main() {
-    pretty_env_logger::init();
     let (txa, rxa) = mpsc::channel::<gui::MessageToRender>();
     let (txb, rxb) = mpsc::channel::<MessageToGUI>();
     spawn(move || render(rxa, txb));
@@ -89,41 +93,62 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
     let mut sample_count: u32 = 5;
 
     let mut img_buff = vec![0u8; image_width as usize * image_height as usize * 3];
-    let mut rng = SmallRng::from_entropy();
+    let mut rng = SmallRng::from_seed([0; 32]);
     let mut world = vec![
-        shapes::Sphere::new(
+        Object::Triangle(Triangle::new(
+            Point3::new(-1.93f32, 0.1f32, -0.5f32),
+            Point3::new(-2.1f32, 1f32, -0.14f32),
+            Point3::new(-2.6f32, -0.82f32, -0.87f32),
+            PropertyAt::Value(0.0),
+            PropertyAt::Value(color::RED),
+            PropertyAt::Value(20f32),
+        )),
+        Object::Triangle(Triangle::new(
+            Point3::new(-2.8f32, -0.83f32, -0.43f32),
+            Point3::new(-2.1f32, 1f32, -0.14f32),
+            Point3::new(-2.6f32, -0.82f32, -0.87f32),
+            PropertyAt::Value(0.0),
+            PropertyAt::Value(color::RED),
+            PropertyAt::Value(20f32),
+        )),
+        Object::Sphere(Sphere::new(
             0.5f32,
             Point3::new(0f32, -0.5f32, -1f32),
             PropertyAt::Value(1.0),
             PropertyAt::Value(color::RED),
-        ),
-        shapes::Sphere::new(
+            PropertyAt::Value(0f32),
+        )),
+        Object::Sphere(Sphere::new(
             0.25f32,
-            Point3::new(0.75f32, -0.25f32, -1.2),
+            Point3::new(1.75f32, -0.25f32, -1.2),
             PropertyAt::Value(0.3),
             PropertyAt::Value(color::WHITE),
-        ),
-        shapes::Sphere::new(
+            PropertyAt::Value(40f32),
+        )),
+        Object::Sphere(Sphere::new(
             0.3f32,
             Point3::new(-0.75f32, -0.7f32, -0.8),
             PropertyAt::Value(0.9),
             PropertyAt::Value(color::WHITE),
-        ),
-        shapes::Sphere::new(
+            PropertyAt::Value(0f32),
+        )),
+        Object::Sphere(Sphere::new(
             0.05f32,
             Point3::new(0f32, -0.91f32, -0.02),
             PropertyAt::Value(0.9),
             PropertyAt::Value(color::BLACK),
-        ),
-        shapes::Sphere::new(
+            PropertyAt::Value(0f32),
+        )),
+        Object::Sphere(Sphere::new(
             100f32,
             Point3::new(0f32, -101f32, -1f32),
             PropertyAt::Value(0.0),
             PropertyAt::Value(color::GREEN),
-        ),
+            PropertyAt::Value(0f32),
+        )),
     ];
     for _ in 0..300 {
-        world.push(shapes::Sphere::new(
+        world.push(Object::Sphere(Sphere::new(
             rng.gen_range(0.1f32..0.3f32),
             Point3::new(
                 rng.gen_range(-3f32..3f32),
@@ -132,9 +157,11 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
             ),
             PropertyAt::Value(rng.gen_range(0f32..1f32)),
             PropertyAt::Value(Color::random()),
-        ))
+            PropertyAt::Value(0f32),
+        )))
     }
     let bvh = BVH::build(&mut world);
+    let world = WorldList::from_vec(world);
 
     loop {
         match rx.recv() {
@@ -172,23 +199,6 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
             }
             Ok(gui::MessageToRender::UpdateSampleCount(sample_count_new)) => {
                 sample_count = sample_count_new
-            }
-            Ok(gui::MessageToRender::SaveImage) => {
-                let img =
-                    RgbImage::from_raw(image_width as u32, image_height as u32, img_buff.clone())
-                        .unwrap_or_default();
-                let hd = home::home_dir().map(|mut d| {
-                    d.push("render.png");
-                    d.into_os_string().to_str().unwrap().to_owned()
-                });
-                if hd.is_some() && img.save(hd.as_ref().unwrap()).is_err() {
-                    warn!(
-                        "Couldn't save render. Is the path {} accessible to the program?",
-                        hd.unwrap()
-                    )
-                } else {
-                    info!("Render saved")
-                }
             }
             Ok(gui::MessageToRender::UpdateCameraAperture(aperture)) => {
                 camera.set_aperture(aperture)

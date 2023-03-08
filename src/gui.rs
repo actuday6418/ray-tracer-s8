@@ -12,7 +12,6 @@ pub enum MessageToRender {
     UpdateCameraFocalLength(f32),
     UpdateCameraFocusDistance(f32),
     UpdateSampleCount(u32),
-    SaveImage,
 }
 
 pub fn launch(tx: mpsc::Sender<MessageToRender>, rx: mpsc::Receiver<MessageToGUI>) {
@@ -170,9 +169,6 @@ impl eframe::App for MyApp {
                         egui::Slider::new(&mut self.image_scale, 0.05f32..=3f32)
                             .drag_value_speed(0.5),
                     );
-                    if ui.button("save").clicked() {
-                        self.tx.send(MessageToRender::SaveImage).unwrap()
-                    }
                 });
             });
         egui::CentralPanel::default().show(ctx, |ui| {
