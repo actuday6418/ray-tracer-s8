@@ -7,6 +7,7 @@ use std::{f32::consts::PI, sync::mpsc};
 pub enum MessageToRender {
     Render,
     ReloadWorld,
+    UpdateDepth(u32),
     UpdateCameraOrigin(Point3),
     UpdateCameraFieldOfView(f32),
     UpdateCameraAperture(f32),
@@ -42,6 +43,7 @@ struct MyApp {
     aperture: f32,
     image_scale: f32,
     sample_count: u32,
+    depth: u32,
 }
 
 impl MyApp {
@@ -61,6 +63,7 @@ impl MyApp {
             aperture: 0.1f32,
             image_scale: 0.97,
             sample_count: 5,
+            depth: 10,
         }
     }
 }
@@ -157,6 +160,15 @@ impl eframe::App for MyApp {
                     if f.drag_released() || f.changed() && !f.dragged() {
                         self.tx
                             .send(MessageToRender::UpdateSampleCount(self.sample_count))
+                            .unwrap();
+                        self.tx.send(MessageToRender::Render).unwrap()
+                    }
+                    ui.label("Maximum depth");
+                    let f =
+                        ui.add(egui::Slider::new(&mut self.depth, 1..=50).drag_value_speed(0.02));
+                    if f.drag_released() || f.changed() && !f.dragged() {
+                        self.tx
+                            .send(MessageToRender::UpdateDepth(self.depth))
                             .unwrap();
                         self.tx.send(MessageToRender::Render).unwrap()
                     }

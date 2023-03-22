@@ -1,7 +1,6 @@
 use bvh::bvh::BVH;
 use bvh::{Point3, Vector3};
 use rand::rngs::SmallRng;
-use rand::Rng;
 use rand::SeedableRng;
 use rand_distr::{Distribution, UnitSphere};
 mod camera;
@@ -12,7 +11,6 @@ use color::Color;
 use rayon::prelude::{IndexedParallelIterator, ParallelIterator};
 use rayon::slice::ParallelSliceMut;
 use shapes::mesh::Triangle;
-use shapes::sphere::Sphere;
 use std::{f32::consts::PI, sync::mpsc, thread::spawn};
 mod gui;
 use shapes::{Object, PropertyAt, WorldList, WorldRefList};
@@ -24,7 +22,6 @@ fn ray_color(ray: &Ray, world: &WorldList, depth: u32, rng: &mut SmallRng, bvh: 
     let v = world.get();
     let world_sub = bvh.traverse(ray, &v);
     match WorldRefList::from_vec(world_sub).intersect(&ray) {
-        // match world.to_ref().intersect(&ray) {
         Some(table) => {
             if table.emission > 0f32 {
                 table.emission * table.albedo
@@ -45,9 +42,7 @@ fn ray_color(ray: &Ray, world: &WorldList, depth: u32, rng: &mut SmallRng, bvh: 
                 ))
             }
         }
-        None =>
-        // color::BLACK,
-        {
+        None => {
             let t = ray.direction.normalize_or_zero().y * 0.5 + 1f32;
             t * color::WHITE
                 + (1f32 - t)
@@ -72,7 +67,7 @@ fn main() {
 }
 
 fn build_world() -> Vec<Object> {
-    let mut world = Vec::new();
+    let mut world = vec![];
     if let Ok((models, Ok(materials))) = tobj::load_obj(
         "/home/actuday/temp/untitled.obj",
         &tobj::LoadOptions::default(),
@@ -111,10 +106,11 @@ fn build_world() -> Vec<Object> {
     }
     world
 }
+
 fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGUI>) {
     let aspect_ratio = 16f32 / 9f32;
     let image_height = 360f32;
-    let max_bounces = 10;
+    let mut max_bounces = 10;
     let image_width = aspect_ratio * image_height;
 
     let mut camera = camera::Camera::new(
@@ -129,13 +125,15 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
     let mut sample_count: u32 = 5;
 
     let mut img_buff = vec![0u8; image_width as usize * image_height as usize * 3];
-    // let mut rng = SmallRng::from_seed([0; 32]);
     let mut world = build_world();
     let mut bvh = BVH::build(&mut world);
     let mut world = WorldList::from_vec(world);
 
     loop {
         match rx.recv() {
+            Ok(gui::MessageToRender::UpdateDepth(depth)) => {
+                max_bounces = depth;
+            }
             Ok(gui::MessageToRender::ReloadWorld) => {
                 let mut world_t = build_world();
                 bvh = BVH::build(&mut world_t);
@@ -154,7 +152,7 @@ fn render(rx: mpsc::Receiver<gui::MessageToRender>, tx: mpsc::Sender<MessageToGU
                             let mut pix_color = color::BLACK;
                             for _ in 0..sample_count {
                                 let r = camera.get_ray(x as u32, y as u32, &mut rng);
-                                pix_color += ray_color(&r, &world, max_bounces, &mut rng, &bvh);
+                                pix_color += ray_color(&r, &world, max_bounces + 1, &mut rng, &bvh);
                             }
                             pix_color.r = (pix_color.r / sample_count as f32).sqrt();
                             pix_color.g = (pix_color.g / sample_count as f32).sqrt();
