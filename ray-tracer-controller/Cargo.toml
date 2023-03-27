@@ -1,0 +1,13 @@
+[package]
+name = "ray-tracer-controller"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ray-tracer-slave = {path="../ray-tracer-slave"}
+tobj = "*"
+tiny_http="*"
+reqwest={version ="0.11", features= ["blocking"]}
+serde_json="*"
