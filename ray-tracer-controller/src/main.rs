@@ -1,203 +1,139 @@
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::web::Bytes;
+use actix_web::{get, post, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use crossbeam_channel::unbounded;
 use crossbeam_channel::{Receiver, Sender};
 use futures::future::join_all;
+use image::{ImageBuffer, Rgb};
 use log::info;
+mod obj;
 use pollster::block_on;
-use ray_tracer_interface::{
-    color::Color,
-    shapes::{mesh::Triangle, Object},
-    Point3, RenderInfo, RenderMeta,
-};
+use ray_tracer_interface::{ImageSlice, RenderInfo, RenderMeta};
+use reqwest::blocking::Client;
 use serde_json::json;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::io::Write;
+use std::sync::{Arc, Mutex, RwLock};
 use uuid::Uuid;
 
-enum MessageToWorker {
-    NewJob(Job),
-    Get(String),
-}
-
 struct Job {
-    id: Uuid,
-    obj: String,
-}
-
-enum MessageToServer {
-    Output(String),
+    render_meta: RenderMeta,
+    result: Vec<ImageSlice>,
 }
 
 struct AppState {
-    rx: Receiver<MessageToServer>,
-    tx: Sender<MessageToWorker>,
-    flag: Arc<RwLock<bool>>,
+    jobs: Vec<Job>,
 }
 
-fn build_world() -> Vec<Object> {
-    let mut world = vec![];
-    if let Ok((models, Ok(materials))) = tobj::load_obj(
-        "/home/actuday/temp/untitled.obj",
-        &tobj::LoadOptions::default(),
-    ) {
-        for m in models.iter() {
-            let mesh = &m.mesh;
-            let material = &materials[mesh.material_id.unwrap()];
-            for i in 0..mesh.indices.len() / 3 {
-                let a = mesh.indices[3 * i];
-                let b = mesh.indices[3 * i + 1];
-                let c = mesh.indices[3 * i + 2];
-                world.push(Object::Triangle(Triangle::new(
-                    Point3::new(
-                        mesh.positions[3 * a as usize],
-                        mesh.positions[3 * a as usize + 1],
-                        mesh.positions[3 * a as usize + 2],
-                    ),
-                    Point3::new(
-                        mesh.positions[3 * b as usize],
-                        mesh.positions[3 * b as usize + 1],
-                        mesh.positions[3 * b as usize + 2],
-                    ),
-                    Point3::new(
-                        mesh.positions[3 * c as usize],
-                        mesh.positions[3 * c as usize + 1],
-                        mesh.positions[3 * c as usize + 2],
-                    ),
-                    (material.shininess as f32) / 1000f32,
-                    Color::from_slice(material.diffuse),
-                    0f32,
-                )));
-            }
-        }
-    } else {
-        panic!("Failed to load obj or mtl file")
-    }
-    world
-}
-
-async fn worker(
-    rx: Receiver<MessageToWorker>,
-    tx: Sender<MessageToServer>,
-    flag: Arc<RwLock<bool>>,
-) {
-    let mut results: HashMap<String, String> = HashMap::new();
-    loop {
-        info!("worker booted");
-        if let Ok(message) = rx.recv() {
-            match message {
-                MessageToWorker::NewJob(Job { id, obj: _ }) => {
-                    {
-                        let mut f = flag.write().unwrap();
-                        *f = true;
-                    }
-                    let client = reqwest::Client::new();
-                    let r = RenderInfo {
-                        world: build_world(),
-                        render_meta: RenderMeta::from_image_divisions(1920, 1080, 2),
-                        division_no: 0,
-                    };
-                    let slaves = vec![
-                        client
-                            .post("http://127.0.0.1:8081/")
-                            .header("Content-Type", "application/json")
-                            .body(json!(r).to_string())
-                            .send(),
-                        client
-                            .post("http://127.0.0.1:8081/")
-                            .header("Content-Type", "application/json")
-                            .body(
-                                json!(RenderInfo {
-                                    division_no: 1,
-                                    ..r
-                                })
-                                .to_string(),
-                            )
-                            .send(),
-                    ];
-                    let slaves: Vec<_> = join_all(slaves)
-                        .await
-                        .into_iter()
-                        .map(|x| x.unwrap().text())
-                        .collect();
-                    let img: String = join_all(slaves)
-                        .await
-                        .into_iter()
-                        .map(|x| x.unwrap())
-                        .fold(String::new(), |a, b| a + &b);
-                    results.insert(id.to_string(), img);
-                    {
-                        let mut f = flag.write().unwrap();
-                        *f = false;
-                    }
-                }
-                MessageToWorker::Get(id) => {
-                    let img = results.remove(&id).unwrap_or(String::new());
-                    tx.send(MessageToServer::Output(img)).unwrap();
-                }
-            }
-        }
-    }
-}
-
-#[post("/")]
-async fn index(req: web::Json<String>, state: web::Data<AppState>) -> impl Responder {
+#[post("/upload/{obj_size}/")]
+async fn index(
+    body: Bytes,
+    path: web::Path<usize>,
+    state: web::Data<RwLock<AppState>>,
+) -> impl Responder {
     info!("Got request");
-    let req = req.into_inner();
+    let obj_size = path.into_inner();
+    let body = body.to_vec();
     let id = Uuid::new_v4();
-    {
-        let f = state.flag.read().unwrap();
-        if *f == true {
-            return String::from("We're busy");
-        }
+    let client = Client::new();
+    let divisions = 20;
+    let render_meta = RenderMeta {
+        height: 1080,
+        width: 1920,
+        divisions,
+        id,
+    };
+    let world = obj::build_world(body, obj_size);
+    for division_no in 0..divisions {
+        info!(
+            "Response from slave: {}",
+            client
+                .post("http://127.0.0.1:8081")
+                .body(
+                    json!(RenderInfo {
+                        division_no,
+                        render_meta: render_meta.clone(),
+                        world: world.clone(),
+                    })
+                    .to_string(),
+                )
+                .header(reqwest::header::CONTENT_TYPE, "application/json")
+                .send()
+                .unwrap()
+                .text()
+                .unwrap_or_default()
+        );
     }
-
-    state
-        .tx
-        .send(MessageToWorker::NewJob(Job { id, obj: req }))
-        .unwrap();
+    let mut state = state.write().unwrap();
+    state.jobs.push(Job {
+        result: Vec::new(),
+        render_meta,
+    });
     id.to_string()
 }
 
-#[get("/poll/{id}")]
-async fn poll(id: web::Path<String>, state: web::Data<AppState>) -> impl Responder {
-    {
-        let f = state.flag.read().unwrap();
-        if *f == true {
-            return String::from("We're busy");
-        }
+#[post("/result")]
+async fn result(req: web::Json<ImageSlice>, state: web::Data<RwLock<AppState>>) -> impl Responder {
+    info!(
+        "Got results from slave: id {} no {}",
+        req.id, req.division_no
+    );
+    let id = req.id;
+    let mut state = state.write().unwrap();
+    if let Some(idx) = state.jobs.iter().position(|job| job.render_meta.id == id) {
+        state.jobs[idx].result.push(req.into_inner());
     }
-    state
-        .tx
-        .send(MessageToWorker::Get(id.into_inner()))
-        .unwrap();
-    if let Ok(message) = state.rx.recv() {
-        match message {
-            MessageToServer::Output(img) => json!(img).to_string(),
-        }
-    } else {
-        String::new()
-    }
+    "slice saved. thank you slave."
+}
+
+#[post("/poll")]
+async fn poll(req: String, state: web::Data<RwLock<AppState>>) -> Bytes {
+    info!("poll {}", req);
+    let mut state = state.write().unwrap();
+    Uuid::parse_str(&req)
+        .map(|id| {
+            if let Some(idx) = state.jobs.iter().position(|job| {
+                println!("{}", job.render_meta.id);
+                job.render_meta.id == id
+            }) {
+                let job = &mut state.jobs[idx];
+                if (0..job.render_meta.divisions)
+                    .all(|i| job.result.iter().find(|res| res.division_no == i).is_some())
+                {
+                    job.result.sort_by(|a, b| a.division_no.cmp(&b.division_no));
+                    let res: Vec<u8> = job
+                        .result
+                        .iter()
+                        .map(|a| a.image.clone())
+                        .flatten()
+                        .collect();
+                    let mut c = std::io::Cursor::new(Vec::new());
+                    let img: ImageBuffer<Rgb<u8>, _> =
+                        ImageBuffer::from_vec(job.render_meta.width, job.render_meta.height, res)
+                            .unwrap();
+                    img.write_to(&mut c, image::ImageOutputFormat::Jpeg(90))
+                        .unwrap();
+                    state.jobs.remove(idx);
+                    Bytes::from(c.into_inner())
+                } else {
+                    Bytes::from_static(b"Job not finished yet")
+                }
+            } else {
+                Bytes::from_static(b"No such job")
+            }
+        })
+        .unwrap_or(Bytes::from_static(b"Invalid Uuid"))
 }
 
 #[actix_web::main]
 async fn main() {
     pretty_env_logger::init();
-    let (txw, rxw) = unbounded::<MessageToWorker>();
-    let (txs, rxs) = unbounded::<MessageToServer>();
-    let flag = Arc::new(RwLock::new(false));
-    let flag2 = flag.clone();
-    info!("Spawning worker!");
-    std::thread::spawn(|| block_on(worker(rxw, txs, flag2)));
-    let state = web::Data::new(AppState {
-        rx: rxs,
-        tx: txw,
-        flag,
-    });
+    let state = web::Data::new(RwLock::new(AppState { jobs: Vec::new() }));
 
     HttpServer::new(move || {
         App::new()
             .service(index)
             .service(poll)
+            .service(result)
             .app_data(state.clone())
     })
     .bind(("127.0.0.1", 8080))

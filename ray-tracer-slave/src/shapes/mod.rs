@@ -20,7 +20,7 @@ pub struct IntersectionTable {
     pub emission: f32,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum Object {
     Sphere(Sphere),
     Triangle(Triangle),

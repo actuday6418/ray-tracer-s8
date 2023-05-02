@@ -16,16 +16,18 @@ glam = {version = "0.23.0", features = ["serde"]}
 auto_impl = "1.0.1"
 rayon = "1.7"
 log = "*"
-serde_json = "*"
-serde = {version="*", features=["derive"]}
+serde_json = "1.0"
+serde = {version="1.0.151", features=["derive"]}
 pretty_env_logger = "0.4.0"
 home = "*"
 rand={version = "0.8.5", features=["small_rng"]}
 rand_distr = "*"
 # image = "*"
 obj-rs = "0.6"
-eframe = "0.21.3"
-egui_extras = "*"
 roots = "0.0.8"
 bvh = { path = "local-dependencies/bvh"}
-tiny_http="*"
+actix-web="4"
+crossbeam-channel = "*"
+tobj = "*"
+reqwest={ versio = "*", features = ["blocking"]}
+uuid = {version="1.3.1", features=["fast-rng", "v4", "serde"]}

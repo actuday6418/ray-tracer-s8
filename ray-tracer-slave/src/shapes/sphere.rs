@@ -9,7 +9,7 @@ use bvh::{
 use roots::Roots;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Sphere {
     radius: f32,
     center: Point3,

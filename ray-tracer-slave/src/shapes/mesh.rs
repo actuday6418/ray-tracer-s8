@@ -11,7 +11,7 @@ use std::cmp::{max_by, min_by};
 
 use super::Intersectable;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct Triangle {
     a: Point3,
     b: Point3,
