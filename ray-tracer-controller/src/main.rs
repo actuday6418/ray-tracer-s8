@@ -47,7 +47,7 @@ async fn index(
         info!(
             "Response from slave: {}",
             client
-                .post("http://127.0.0.1:8081")
+                .post("http://0.0.0.0:8081")
                 .body(
                     json!(RenderInfo {
                         division_no,
@@ -136,7 +136,7 @@ async fn main() {
             .service(result)
             .app_data(state.clone())
     })
-    .bind(("127.0.0.1", 8080))
+    .bind(("0.0.0.0", 8080))
     .unwrap()
     .run()
     .await

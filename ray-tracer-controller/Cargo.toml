@@ -7,14 +7,17 @@ edition = "2021"
 
 [dependencies]
 ray-tracer-slave = {path="../ray-tracer-slave"}
-reqwest={ versio = "*", features = ["blocking"]}
+reqwest={ version = "*", features = ["blocking"]}
 crossbeam-channel = "*"
 serde_json="*"
 image={version="*"}
-actix-web="4.3.1"
+actix-web={version = "4.3.1", features = ["rustls"]}
 log = "*"
 pretty_env_logger = "0.4.0"
 tobj = "*"
 uuid = {version="1.3.1", features=["fast-rng", "v4"]}
 futures = "*"
 pollster = "*"
+
+[profile.release]
+lto = true

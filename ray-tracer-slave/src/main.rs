@@ -1,4 +1,4 @@
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{post, web, App, HttpResponse, HttpServer, Responder};
 use bvh::bvh::BVH;
 use bvh::ray::Ray;
 use bvh::{Point3, Vector3};
@@ -96,7 +96,7 @@ fn worker(rx: Receiver<MessageToWorker>, tx: Sender<MessageToServer>) {
                     info!(
                         "master responded to result:  {}",
                         client
-                            .post("http://127.0.0.1:8080/result")
+                            .post("http://0.0.0.0:8080/result")
                             .body(p,)
                             .header(reqwest::header::CONTENT_TYPE, "application/json")
                             .send()
@@ -167,7 +167,7 @@ async fn main() {
     let state = web::Data::new(AppState { rx: rxs, tx: txw });
 
     HttpServer::new(move || App::new().service(index).app_data(state.clone()))
-        .bind(("127.0.0.1", 8081))
+        .bind(("0.0.0.0", 8081))
         .unwrap()
         .run()
         .await
