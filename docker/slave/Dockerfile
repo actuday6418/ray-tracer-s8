@@ -8,6 +8,8 @@ WORKDIR /app
 
 COPY . .
 
+ENV RUST_LOG=info
+
 EXPOSE 8081
 
 CMD ["/app/ray-tracer-slave"]

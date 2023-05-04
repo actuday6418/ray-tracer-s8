@@ -47,7 +47,7 @@ async fn index(
         info!(
             "Response from slave: {}",
             client
-                .post("http://0.0.0.0:8081")
+                .post("http://slave:8081")
                 .body(
                     json!(RenderInfo {
                         division_no,

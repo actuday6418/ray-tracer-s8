@@ -96,7 +96,7 @@ fn worker(rx: Receiver<MessageToWorker>, tx: Sender<MessageToServer>) {
                     info!(
                         "master responded to result:  {}",
                         client
-                            .post("http://0.0.0.0:8080/result")
+                            .post("http://master:8080/result")
                             .body(p,)
                             .header(reqwest::header::CONTENT_TYPE, "application/json")
                             .send()
