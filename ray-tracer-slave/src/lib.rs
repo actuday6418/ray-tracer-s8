@@ -5,8 +5,9 @@ pub mod shapes;
 pub use bvh::Point3;
 use serde::{Deserialize, Serialize};
 use shapes::Object;
+use displaydoc::Display;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Display)]
 pub struct RenderInfo {
     pub world: Vec<Object>,
     pub render_meta: RenderMeta,

@@ -1,5 +1,6 @@
 use std::io::BufReader;
 
+use log::info;
 use ray_tracer_interface::{
     color::Color,
     shapes::{mesh::Triangle, Object},
@@ -9,11 +10,13 @@ use ray_tracer_interface::{
 pub fn build_world(data: Vec<u8>, obj_size: usize) -> Vec<Object> {
     let mut world = vec![];
     let mut obj_br = BufReader::new(&data[..obj_size]);
+    info!("Retrieving models and materials");
     if let Ok((models, Ok(materials))) =
         tobj::load_obj_buf(&mut obj_br, &tobj::LoadOptions::default(), |_| {
             tobj::load_mtl_buf(&mut BufReader::new(&data[obj_size..]))
         })
     {
+        info!("starting world build");
         for m in models.iter() {
             let mesh = &m.mesh;
             let material = &materials[mesh.material_id.unwrap()];

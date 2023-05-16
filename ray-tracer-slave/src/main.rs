@@ -1,4 +1,4 @@
-use actix_web::{post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{post, web, App, HttpServer, Responder};
 use bvh::bvh::BVH;
 use bvh::ray::Ray;
 use bvh::{Point3, Vector3};
@@ -12,7 +12,7 @@ use ray_tracer_interface::ImageSlice;
 use ray_tracer_interface::{
     camera,
     color::{self, Color},
-    shapes::{mesh::Triangle, Object, WorldList, WorldRefList},
+    shapes::{WorldList, WorldRefList},
     RenderInfo,
 };
 use rayon::prelude::{IndexedParallelIterator, ParallelIterator};
@@ -25,16 +25,11 @@ enum MessageToWorker {
     NewJob(RenderInfo),
 }
 
-enum MessageToServer {
-    Output(Option<Vec<u8>>),
-}
-
 struct AppState {
-    rx: Receiver<MessageToServer>,
     tx: Sender<MessageToWorker>,
 }
 
-fn worker(rx: Receiver<MessageToWorker>, tx: Sender<MessageToServer>) {
+fn worker(rx: Receiver<MessageToWorker>) {
     let client = Client::new();
     loop {
         if let Ok(message) = rx.recv() {
@@ -68,6 +63,9 @@ fn worker(rx: Receiver<MessageToWorker>, tx: Sender<MessageToServer>) {
                         .par_chunks_exact_mut(image_width as usize * 3)
                         .enumerate()
                         .for_each(|(y, row)| {
+                            let y = ((image_height / req.render_meta.divisions) * req.division_no)
+                                as usize
+                                + y;
                             let mut rng = SmallRng::from_entropy();
                             for (x, p) in row.chunks_exact_mut(3).enumerate() {
                                 let y = image_height as usize - y - 1;
@@ -90,9 +88,6 @@ fn worker(rx: Receiver<MessageToWorker>, tx: Sender<MessageToServer>) {
                         division_no: req.division_no
                     })
                     .to_string();
-                    let mut f = std::fs::File::create("t.json").unwrap();
-                    use std::io::Write;
-                    f.write_all(p.as_bytes()).unwrap();
                     info!(
                         "master responded to result:  {}",
                         client
@@ -152,7 +147,7 @@ fn ray_color(ray: &Ray, world: &WorldList, depth: u32, rng: &mut SmallRng, bvh: 
 
 #[post("/")]
 async fn index(req: web::Json<RenderInfo>, state: web::Data<AppState>) -> impl Responder {
-    info!("Got request");
+    info!("Slave Got request");
     let req = req.into_inner();
     state.tx.send(MessageToWorker::NewJob(req)).unwrap();
     "i'll get you a slice at once"
@@ -161,15 +156,19 @@ async fn index(req: web::Json<RenderInfo>, state: web::Data<AppState>) -> impl R
 #[actix_web::main]
 async fn main() {
     pretty_env_logger::init();
-    let (txw, rxw) = unbounded::<MessageToWorker>();
-    let (txs, rxs) = unbounded::<MessageToServer>();
-    std::thread::spawn(|| worker(rxw, txs));
-    let state = web::Data::new(AppState { rx: rxs, tx: txw });
+    let (tx, rx) = unbounded::<MessageToWorker>();
+    std::thread::spawn(|| worker(rx));
+    let state = web::Data::new(AppState { tx });
 
-    HttpServer::new(move || App::new().service(index).app_data(state.clone()))
-        .bind(("0.0.0.0", 8081))
-        .unwrap()
-        .run()
-        .await
-        .unwrap();
+    HttpServer::new(move || {
+        App::new()
+            .service(index)
+            .app_data(state.clone())
+            .app_data(web::JsonConfig::default().limit(500_000_000))
+    })
+    .bind(("0.0.0.0", 8081))
+    .unwrap()
+    .run()
+    .await
+    .unwrap();
 }

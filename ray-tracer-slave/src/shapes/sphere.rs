@@ -50,14 +50,14 @@ impl Intersectable for Sphere {
         (point - self.center).normalize_or_zero()
     }
 
-    fn roughness_at(&self, point: Point3) -> f32 {
+    fn roughness_at(&self, _: Point3) -> f32 {
         self.p_roughness_at
     }
 
-    fn albedo_at(&self, point: Point3) -> Color {
+    fn albedo_at(&self, _: Point3) -> Color {
         self.p_albedo_at
     }
-    fn emission_at(&self, point: Point3) -> f32 {
+    fn emission_at(&self, _: Point3) -> f32 {
         self.p_emission_at
     }
 }

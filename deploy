@@ -4,6 +4,6 @@ cargo build --release --manifest-path=ray-tracer-slave/Cargo.toml && \
   cp ray-tracer-controller/target/release/ray-tracer-controller docker/master/ && \
   cp ray-tracer-slave/target/release/ray-tracer-slave docker/slave/ && \
   cd docker && \
-  docker compose -f docker-stack.yaml up -d && \
+  docker compose -f docker-stack.yaml up && \
   echo "Deployment completed successfully" || \
   echo "Deployment Failed!"
